@@ -28,6 +28,8 @@ void Data()
 
 void setup() {
 
+  Serial.begin(9600);
+
 pinMode(EnableL, OUTPUT);
 pinMode(HighL, OUTPUT);
 pinMode(LowL, OUTPUT);
@@ -148,6 +150,9 @@ void loop()
 {
   // read data from Pi and determine where to go.
   Data();
+
+  Serial.print("data is ");
+  Serial.println(data);
   
   if (data == 0)
   {

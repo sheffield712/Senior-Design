@@ -10,6 +10,7 @@ using namespace cv;
 using namespace raspicam;
 
 Mat frame, Matrix, framePers, frameGray, frameThresh, frameEdge, frameFinal, frameFinalDuplicate;
+Mat frameRed, mask;
 Mat ROILane;
 int LeftLanePos, RightLanePos, MiddlePos, frameCenter, laneCenter, Result;
 int firstpin, secondpin, thirdpin, fourthpin;
@@ -45,6 +46,15 @@ void Perspective()
 // make the image grayscale and up the contrast
 void Threshold()
 {
+	// red
+	cvtColor(framePers, frameRed, COLOR_BGR2HSV);
+	
+	Mat mask1, mask2;
+    inRange(frameRed, Scalar(0, 70, 50), Scalar(5, 255, 255), mask1);
+    inRange(frameRed, Scalar(175, 70, 50), Scalar(180, 255, 255), mask2);
+
+    add(mask1, mask2, mask);
+	
 	cvtColor(framePers, frameGray, COLOR_RGB2GRAY);
 	// frame input name, min threshold for white, max threshold for white, frame output name. Tweak these as necessary, but min threshold may want to go down if indoors.
 	// find the white in the image.
@@ -163,6 +173,73 @@ void Capture()
 	// cvtColor(frame, frame, COLOR_BGR2RGB);
 }
 
+void Drive()
+{
+	if (Result == 0 || Result == -59)
+    {
+		digitalWrite(21, 0);
+		digitalWrite(22, 0);    //decimal = 0
+		digitalWrite(23, 0);
+		digitalWrite(24, 0);
+		cout<<"Forward"<<endl;
+    }
+    
+        
+    else if (Result >0 && Result <10)
+    {
+		digitalWrite(21, 1);
+		digitalWrite(22, 0);    //decimal = 1
+		digitalWrite(23, 0);
+		digitalWrite(24, 0);
+		cout<<"Right1"<<endl;
+    }
+    
+    else if (Result >=10 && Result <20)
+    {
+		digitalWrite(21, 0);
+		digitalWrite(22, 1);    //decimal = 2
+		digitalWrite(23, 0);
+		digitalWrite(24, 0);
+		cout<<"Right2"<<endl;
+    }
+    
+    else if (Result >20)
+    {
+		digitalWrite(21, 1);
+		digitalWrite(22, 1);    //decimal = 3
+		digitalWrite(23, 0);
+		digitalWrite(24, 0);
+		cout<<"Right3"<<endl;
+    }
+    
+    else if (Result <0 && Result >-10)
+    {
+		digitalWrite(21, 0);
+		digitalWrite(22, 0);    //decimal = 4
+		digitalWrite(23, 1);
+		digitalWrite(24, 0);
+		cout<<"Left1"<<endl;
+    }
+    
+    else if (Result <=-10 && Result >-20)
+    {
+		digitalWrite(21, 1);
+		digitalWrite(22, 0);    //decimal = 5
+		digitalWrite(23, 1);
+		digitalWrite(24, 0);
+		cout<<"Left2"<<endl;
+    }
+    
+    else if (Result <-20)
+    {
+		digitalWrite(21, 0);
+		digitalWrite(22, 1);    //decimal = 6
+		digitalWrite(23, 1);
+		digitalWrite(24, 0);
+		cout<<"Left3"<<endl;
+    }
+}
+
 int main(int argc, char **argv)
 {
 	firstpin = 21;
@@ -200,75 +277,7 @@ int main(int argc, char **argv)
 		Histogram();
 		BallFinder();
 		LaneCenter();
-		
-		if (Result == 0 || Result == -59)
-    {
-	digitalWrite(21, 0);
-	digitalWrite(22, 0);    //decimal = 0
-	digitalWrite(23, 0);
-	digitalWrite(24, 0);
-	cout<<"Forward"<<endl;
-    }
-    
-        
-    else if (Result >0 && Result <10)
-    {
-	digitalWrite(21, 1);
-	digitalWrite(22, 0);    //decimal = 1
-	digitalWrite(23, 0);
-	digitalWrite(24, 0);
-	cout<<"Right1"<<endl;
-    }
-    
-        else if (Result >=10 && Result <20)
-    {
-	digitalWrite(21, 0);
-	digitalWrite(22, 1);    //decimal = 2
-	digitalWrite(23, 0);
-	digitalWrite(24, 0);
-	cout<<"Right2"<<endl;
-    }
-    
-        else if (Result >20)
-    {
-	digitalWrite(21, 1);
-	digitalWrite(22, 1);    //decimal = 3
-	digitalWrite(23, 0);
-	digitalWrite(24, 0);
-	cout<<"Right3"<<endl;
-    }
-    
-        else if (Result <0 && Result >-10)
-    {
-	digitalWrite(21, 0);
-	digitalWrite(22, 0);    //decimal = 4
-	digitalWrite(23, 1);
-	digitalWrite(24, 0);
-	cout<<"Left1"<<endl;
-    }
-    
-        else if (Result <=-10 && Result >-20)
-    {
-	digitalWrite(21, 1);
-	digitalWrite(22, 0);    //decimal = 5
-	digitalWrite(23, 1);
-	digitalWrite(24, 0);
-	cout<<"Left2"<<endl;
-    }
-    
-        else if (Result <-20)
-    {
-	digitalWrite(21, 0);
-	digitalWrite(22, 1);    //decimal = 6
-	digitalWrite(23, 1);
-	digitalWrite(24, 0);
-	cout<<"Left3"<<endl;
-    }
-		
-		ss.str(" ");
-		ss.clear();
-		ss<<"Result = "<<Result;
-		putText(frame, ss.str(), Point2f(1,50), 0, 1, Scalar(0,0,255), 2);
+		Drive();
 		
 		namedWindow("original", WINDOW_KEEPRATIO);
 		moveWindow("original", 0, 100);
@@ -286,6 +295,10 @@ int main(int argc, char **argv)
 		resizeWindow("GRAY", 640, 480);
 		imshow("GRAY", frameFinal);
 		
+		namedWindow("Red", WINDOW_KEEPRATIO);
+		moveWindow("Red", 640, 600);
+		resizeWindow("Red", 640, 480);
+		imshow("Red", mask);
 		
 		// wait 1 millisecond
 		waitKey(1);
@@ -295,7 +308,12 @@ int main(int argc, char **argv)
 		
 		float t = elapsed_seconds.count();
 		int FPS = 1 / t;
-		// cout<<"FPS = "<<FPS<<endl;
+		cout<<"FPS = "<<FPS<<endl;
+		
+		ss.str(" ");
+		ss.clear();
+		ss<<"Result = "<<Result;
+		putText(frame, ss.str(), Point2f(1,50), 0, 1, Scalar(0,0,255), 2);
 	}
 	
 	return 0;

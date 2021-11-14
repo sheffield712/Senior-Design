@@ -9,9 +9,11 @@ using namespace std;
 using namespace cv;
 using namespace raspicam;
 
-Mat frame, Matrix, framePers, frameGray, frameThresh, frameEdge, frameFinal, frameFinalDuplicate;
+Mat frame, Matrix, framePers, frameGray, frameThresh, frameEdge, frameFinal, frameFinalDuplicate, frameFinalDuplicateVert, frameFinalDuplicateHor;
 Mat frameRed, mask;
 Mat ROILane;
+Mat ROIBoundary;
+Mat ROIBoundaryHorizontal;
 int LeftLanePos, RightLanePos, MiddlePos, frameCenter, laneCenter, Result;
 int firstpin, secondpin, thirdpin, fourthpin;
 
@@ -22,6 +24,8 @@ stringstream ss;
 
 // dynamic array
 vector<int> histogramLane;
+vector<int> histogramBoundary;
+vector<int> histogramBoundaryHorizontal;
 
 // create a frame of reference... adjust these as needed. They represent the 4 corners of the box.
 Point2f Source[] = {Point2f(25, 120), Point2f(330, 120), Point2f(0, 210), Point2f(360, 210)};
@@ -33,10 +37,10 @@ void Perspective()
 	// this is to join the 4 points via openCV
 	int lineWidth = 2;
 	
-	line(frame, Source[0], Source[1], Scalar(0, 0, 255), lineWidth); // goes from top left to top right
-	line(frame, Source[1], Source[3], Scalar(0, 0, 255), lineWidth); // goes from top right to bottom right
-	line(frame, Source[3], Source[2], Scalar(0, 0, 255), lineWidth); // goes from bottom right to bottom left
-	line(frame, Source[2], Source[0], Scalar(0, 0, 255), lineWidth); // goes from bottom left to top left
+	// line(frame, Source[0], Source[1], Scalar(0, 255, 0), lineWidth); // goes from top left to top right
+	// line(frame, Source[1], Source[3], Scalar(0, 255, 0), lineWidth); // goes from top right to bottom right
+	// line(frame, Source[3], Source[2], Scalar(0, 255, 0), lineWidth); // goes from bottom right to bottom left
+	// line(frame, Source[2], Source[0], Scalar(0, 255, 0), lineWidth); // goes from bottom left to top left
 	
 	
 	Matrix = getPerspectiveTransform(Source, Destination);
@@ -50,8 +54,12 @@ void Threshold()
 	cvtColor(framePers, frameRed, COLOR_BGR2HSV);
 	
 	Mat mask1, mask2;
-    inRange(frameRed, Scalar(0, 70, 50), Scalar(5, 255, 255), mask1);
-    inRange(frameRed, Scalar(175, 70, 50), Scalar(180, 255, 255), mask2);
+	
+	// first digit in Scalar is it's Hue... (red goes from 175 to 5 (it wraps around 180 and back to 0))
+	// Second digit is for Saturation... The higher the saturation value, the deeper the red... a low saturation is a lighter red
+	// the third value represents value... a value of 0 is black. Darker read means a lower value 
+    inRange(frameRed, Scalar(0, 120, 50), Scalar(5, 255, 255), mask1);
+    inRange(frameRed, Scalar(175, 120, 50), Scalar(180, 255, 255), mask2);
 
     add(mask1, mask2, mask);
 	
@@ -67,6 +75,8 @@ void Threshold()
 	cvtColor(frameFinal, frameFinal, COLOR_GRAY2RGB);
 	// used in histogram function only.
 	cvtColor(frameFinal, frameFinalDuplicate, COLOR_RGB2BGR);
+	cvtColor(frameFinal, frameFinalDuplicateVert, COLOR_RGB2BGR);
+	cvtColor(frameFinal, frameFinalDuplicateHor, COLOR_RGB2BGR);
 }
 
 void Histogram()
@@ -84,6 +94,37 @@ void Histogram()
 	}
 }
 
+void BoundaryHistogram()
+{	
+	histogramBoundaryHorizontal.resize(frame.rows);
+	histogramBoundaryHorizontal.clear();
+	
+	histogramBoundary.resize(frame.size().width);
+	histogramBoundary.clear();
+	
+	for (int i = 0; i < frame.size().width; i++)
+	{
+		ROIBoundary = frameFinalDuplicateVert(Rect(i, 140, 1, 100));
+		divide(255, ROIBoundary, ROIBoundary);
+		histogramBoundary.push_back((int)(sum(ROIBoundary)[0]));
+	}
+	
+	for (int i = 0; i < 120; i++)
+	{
+		ROIBoundaryHorizontal = mask(Rect(1, i + 1, 359, i));
+		// divide(255, ROIBoundaryHorizontal, ROIBoundaryHorizontal);
+		
+		// cout<<"number is "<<i<<endl;
+		
+		if ((int)sum(ROIBoundaryHorizontal)[0] > 1) 
+		{
+			// push the row where it found red pixels
+			histogramBoundaryHorizontal.insert(histogramBoundaryHorizontal.begin(), i+1);
+			break;
+		}
+	}
+}
+
 void LaneCenter()
 {
 	frameCenter = 180;
@@ -94,22 +135,29 @@ void LaneCenter()
 	Result = MiddlePos - frameCenter;
 }
 
-void LaneFinder()
+void BoundaryFinder()
 {
-	// iterator to point to max intensity spot
-	vector<int>:: iterator LeftPtr;
-	// scans from left-most pixel to middle pixel
-	LeftPtr = max_element(histogramLane.begin(), histogramLane.begin() + 200);
-	LeftLanePos = distance(histogramLane.begin(), LeftPtr);
+	vector<int>:: iterator LeftBoundary;
+	vector<int>:: iterator RightBoundary;
+	vector<int>:: iterator MiddleBoundary;
 	
-	// iterator to point to max intensity spot
-	vector<int>:: iterator RightPtr;
-	// scans from left-most pixel to middle pixel
-	RightPtr = max_element(histogramLane.begin() + 200, histogramLane.end());
-	RightLanePos = distance(histogramLane.begin(), RightPtr);
+	LeftBoundary = max_element(histogramBoundary.begin(), histogramBoundary.begin() + 120);
+	LeftLanePos = distance(histogramBoundary.begin(), LeftBoundary);
 	
-	line(frameFinal, Point2f(LeftLanePos, 0), Point2f(LeftLanePos, 240), Scalar(0, 250, 0), 2);
-	line(frameFinal, Point2f(RightLanePos, 0), Point2f(RightLanePos, 240), Scalar(0, 250, 0), 2);
+	RightBoundary = max_element(histogramBoundary.end() - 119, histogramBoundary.end());
+	RightLanePos = distance(histogramBoundary.begin(), RightBoundary);
+	
+	MiddleBoundary = max_element(histogramBoundary.begin() + 121, histogramBoundary.end() - 120);
+	MiddlePos = distance(histogramBoundary.begin(), MiddleBoundary);
+	
+	// cout<<"LEFT Boundary = "<<LeftLanePos<<endl;
+	// cout<<"RIGHT Boundary = "<<RightLanePos<<endl;
+	// cout<<"MIDDLE Boundary = "<<MiddlePos<<endl;
+	
+	if (histogramBoundaryHorizontal.size() > 0)
+	{
+		cout<<histogramBoundaryHorizontal[0]<<endl;
+	}
 }
 
 void BallFinder()
@@ -125,7 +173,6 @@ void BallFinder()
 	// scans from left-most pixel to middle pixel
 	RightPtr = max_element(histogramLane.end() - 119, histogramLane.end());
 	RightLanePos = distance(histogramLane.begin(), RightPtr);
-	
 	
 	vector<int>:: iterator MiddlePtr;
 	MiddlePtr = max_element(histogramLane.begin() + 121, histogramLane.end() - 120);
@@ -144,6 +191,7 @@ void BallFinder()
 		MiddlePos = RightLanePos;
 	}
 	
+	// draw the line on the ball
 	line(frameFinal, Point2f(MiddlePos, 0), Point2f(MiddlePos, 240), Scalar(0, 250, 0), 2);
 	
 }
@@ -277,7 +325,9 @@ int main(int argc, char **argv)
 		Histogram();
 		BallFinder();
 		LaneCenter();
-		Drive();
+		BoundaryHistogram();
+		BoundaryFinder();
+		// Drive();
 		
 		namedWindow("original", WINDOW_KEEPRATIO);
 		moveWindow("original", 0, 100);
